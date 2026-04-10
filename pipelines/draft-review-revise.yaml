@@ -1,0 +1,71 @@
+name: draft-review-revise
+description: |
+  Three-step pipeline: model A drafts → model B critiques → model A revises.
+  This is the canonical "writing with peer review" template.
+  Replace model IDs with whatever you have configured in config.yaml.
+
+inputs: {}
+
+steps:
+  - name: draft
+    model: gpt-4o-mini       # cheap & fast for the first pass
+    max_tokens: 8192
+    prompt: |
+      You are a product manager's assistant. Below is a meeting transcript.
+      Distill it into a structured meeting summary with sections:
+      Topic / Discussion / Decisions / Action Items / Open Questions.
+
+      Rules:
+      - Do not paraphrase line by line; compress to decision level
+      - Mark any unclear owner/deadline as "TBD"
+      - Markdown format
+
+      Transcript:
+
+      ---
+
+      {file:inputs/02-meeting/transcript.txt}
+
+  - name: critique
+    model: gpt-4o            # stronger model as the critic
+    max_tokens: 4096
+    prompt: |
+      Below is a meeting summary draft. Acting as a strict senior PM,
+      find factual errors, missing items, or vague judgments. List up to
+      10 issues, ordered by importance. For each issue, briefly cite
+      where in the draft you saw it.
+
+      Do not rewrite the draft. Critique only.
+
+      Draft:
+
+      ---
+
+      {step:draft}
+
+  - name: revise
+    model: gpt-4o-mini       # back to the drafter, with critique in hand
+    max_tokens: 8192
+    prompt: |
+      Below is the original draft and a critique. Revise the draft based
+      on the critique, preserving the original structure. If you disagree
+      with a critique item, keep the original text but add a final
+      "Critique items not adopted" section explaining why.
+
+      Original draft:
+
+      ---
+
+      {step:draft}
+
+      ---
+
+      Critique:
+
+      ---
+
+      {step:critique}
+
+      ---
+
+      Output the revised summary:

@@ -1,0 +1,90 @@
+[Mock meeting transcript — generated for benchmark purposes only.
+Names and decisions are fictional. Replace with your own real
+materials when adapting this benchmark to your domain.]
+
+Sarah (PM): Okay, let's get started. Today we need to align on the
+checkout API rate limiting. The infra team flagged us last week that
+we hit 12,000 requests per minute during the Black Friday rehearsal,
+and our current limit is 8,000. So either we raise the limit or we
+push back on the marketing team about the campaign cadence.
+
+Mike (Backend Lead): I'd push back on raising it without doing the math.
+At 12k rpm we already saw p99 latency spike to 1.4 seconds. The bottleneck
+is the inventory check, not the API gateway itself. If we just raise the
+gateway limit we're going to break payment confirmations downstream.
+
+Sarah: Right, so the fix isn't just a config change.
+
+Mike: No, it's an architecture conversation. We've talked about caching
+the inventory hot path for two quarters now. I think this is the forcing
+function.
+
+Tom (SRE): Speaking of architecture — if we cache, we need to think
+about staleness. Our inventory updates from the warehouse poll every
+30 seconds. Black Friday traffic patterns mean a hot SKU could go from
+100 in stock to 0 in maybe 4-5 seconds. That's a real oversell risk.
+
+Mike: Yeah, agreed. So caching alone is not the answer either. We
+probably need a write-through cache with a soft reservation, or we
+need to move inventory state into Redis with a TTL of like 2 seconds.
+
+Sarah: Okay, hold on. Let me step back. The problem we're trying
+to solve is: marketing wants to run a flash sale at noon EST on
+Black Friday, projected peak 15,000 rpm. We have three options as
+I see it.
+
+Option A: Raise the rate limit to 16k, accept the latency hit, and
+add a banner saying "high traffic" if p99 exceeds 2 seconds.
+
+Option B: Cache inventory in Redis with TTL of 2-3 seconds, requires
+backend rework but addresses the root cause.
+
+Option C: Push back on marketing — ask them to spread the flash sale
+into two waves of 7,500 rpm each, 30 minutes apart.
+
+Tom: Option C is the cheapest. Engineering-wise, zero effort. Whether
+marketing buys it is another story.
+
+Mike: B is the right long-term answer but I don't think we ship it
+in three weeks. Maybe four, with risk.
+
+Sarah: Three weeks is the constraint. Black Friday is November 29th.
+So we're really choosing between A and C, with B as the next-quarter
+follow-up.
+
+Tom: I'd advocate strongly against A by itself. We need at least
+some inventory caching to avoid the oversell risk even at 12k rpm.
+What if we do a smaller version of B — just cache the top 50 SKUs,
+not the full catalog — combined with C as a safety net?
+
+Mike: That's actually doable in three weeks. Top 50 SKUs covers
+maybe 80% of flash sale volume. The other 20% can take the latency hit.
+
+Sarah: Okay, that sounds like a plan. Let me make sure I have the
+action items:
+
+1. Mike: scope out top-50 SKU caching with Redis, target three weeks,
+   come back to me by Friday with a yes/no and a risk list.
+
+2. Tom: write up the oversell risk analysis with the 4-5 second
+   warehouse poll constraint, share with marketing as the rationale
+   for option C as a backstop.
+
+3. I will talk to marketing about the two-wave option as the
+   safety net. We should have an answer from them by Wednesday.
+
+4. Open question: do we need legal review for "high traffic" banner
+   wording? Let's check with Priya.
+
+Mike: One more thing — we should set up a load test environment
+that mirrors the cache architecture. Currently our staging doesn't
+have Redis. That's a blocker.
+
+Sarah: Add it as a pre-req. Mike, can you quote that effort
+separately?
+
+Mike: Yeah, half a day for me, but it depends on the platform team.
+
+Sarah: Okay, let's wrap. Next sync Friday morning.
+
+[End of transcript]
